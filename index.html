@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>공허의 왕국</title>
+<style>
+:root{--bg:#05080d;--fg:#cfe6f2;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#05080d;--fg:#cfe6f2}}
+:root[data-theme="dark"]{--bg:#05080d;--fg:#cfe6f2}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:-apple-system,"Malgun Gothic","Apple SD Gothic Neo",sans-serif}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center}
+canvas{width:100%;max-width:960px;height:auto;display:block;background:#05080d}
+#hint{font-size:12px;opacity:.7;padding:6px 10px;text-align:center}
+</style>
+</head>
+<body>
+<canvas id="c" width="960" height="544"></canvas>
+<div id="hint">←→↑↓ 이동 · Z 점프 · X 공격 · C 대시 · A 집중/주문 · D 꿈의 검 · ↑ 대화/벤치 · Tab 지도 · I 부적 · M 음소거 · Esc 일시정지 (벽에 붙어 Z: 벽 점프)</div>
+<script>
+var C=document.getElementById('c');
+var X=C?C.getContext('2d'):null;
+if(!C||!X){throw new Error('canvas 초기화 실패')}
+var W=960,H=544,T=32,MW=200,MH=17,CW=50,CH=5;
+var G=new Uint8Array(MW*MH),EX=new Uint8Array(CW*CH),K={},E=[],PT=[],FB=[],MO=[];
+var st=0,sT=0,tm=0,cam=0,shake=0,hs=0,bi=0,geo=0,nd=1,mh=5,zn=-1,bn='',bt=0,fid=0;
+var hasDash=0,hasDbl=0,hasWall=0,bk=0,mapOK=0,dl=null,di=0,dc=0,dn=0,lgx=0,lgy=0,th='',tt=0;
+var BN=[5,34,90,128,155,176];
+var ow=[0,0,0,0,0],eq=[0,0,0,0,0],sel=0,mute=0,ms=0;
+var CHN=['빠른 베기','영혼 포획','긴 검','단단한 껍질','지오 수집가'];
+var CHD=['공격 속도 증가','타격 시 영혼 획득량 증가','검의 사거리 증가','피격 후 무적 시간 증가','지오 획득량 50% 증가'];
+var SC=[0,3,5,7,10,12];
+var AC=null,MG=null,NB=null;
+var PL=[[31,12,5],[38,10,4],[44,12,4],[58,12,5],[63,9,4],[80,12,4],[88,12,4],[94,10,4],[103,11,2],[106,8,2],[114,12,5],[120,10,4],[126,12,4],[164,6,4],[169,9,3],[174,12,3],[152,10,3]];
+var ZN=['잿빛 마을','잊힌 갈림길','눈물의 심연','수호자의 방','서리 첨탑','서리의 옥좌'];
+var ZC=[['#0b1226','#1b2a4a','#18243a','#4a6a98'],['#080e14','#101c26','#121c28','#2c4a5e'],['#0a0814','#1a1228','#1a1426','#5a3a7a'],['#100608','#2a1018','#241018','#7a3a3a'],['#06121a','#0f2a3a','#12303e','#6aa8c8'],['#0a1020','#1a2a50','#1a2848','#9ad0ff']];
+var BG=[];
+for(var zi=0;zi<6;zi++){var gg=X.createLinearGradient(0,0,0,H);gg.addColorStop(0,ZC[zi][0]);gg.addColorStop(1,ZC[zi][1]);BG.push(gg)}
+var vg=X.createRadialGradient(0,0,90,0,0,560);
+vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,0.94)');
+var NP=[
+{x:9,n:'장로 노바',c:'#8a9aa8',th:'…수호자여, 나는 너를 원망하지 않는다…',l:['오래전 이곳은 빛나는 지하 왕국이었다네.','그러나 회색 역병이 번졌고, 수호자는 왕국을 지키려 스스로 문을 걸어 잠갔지.','작은 기사여, 심연 끝의 수호자를 쓰러뜨려 역병의 뿌리를 끊어주게.','길 어딘가에 그림자 망토와 바람 날개가 잠들어 있을 걸세.','수호자 너머엔 서리 첨탑이 있다네. 사마귀 발톱이 없으면 오를 수 없지.']},
+{x:15,n:'지도 제작자 코르',c:'#c8a060',th:'…이 지도의 빈 곳이 두렵다…',l:['내 이름은 코르, 지도 제작자지.','걸은 길이 저절로 기록되는 지도를 주겠네.','Tab으로 펼쳐 보게. 벤치는 길을 잃은 자의 쉼터라네.']},
+{x:21,n:'상인 셀',c:'#6aa890',th:'…오늘도 아무도 안 사가는군…',l:['지오(영혼 조각)가 있나? 거래하세.','[1] 마스크 조각 +1 (60 지오)   [2] 검 단련 (40 지오)','숫자 키로 구매하고, 끝나면 Z를 누르게.']}
+];
+var PU=[{x:48,t:0,g:0,m:'그림자 망토 획득! C로 대시'},{x:96,t:1,g:0,m:'바람 날개 획득! 공중에서 한 번 더 점프'},{x:152,t:2,g:0,m:'사마귀 발톱 획득! 벽에 붙어 Z로 벽 점프'},{x:26,t:3,g:0,m:'부적: 빠른 베기 (I로 장착)'},{x:57,t:4,g:0,m:'부적: 영혼 포획 (I로 장착)'},{x:100,t:5,g:0,m:'부적: 긴 검 (I로 장착)'},{x:121,t:6,g:0,m:'부적: 단단한 껍질 (I로 장착)'},{x:172,t:7,g:0,m:'부적: 지오 수집가 (I로 장착)'}];
+var EP=['서리의 군주가 쓰러지자 회색 역병이 서서히 걷혔다.','왕국의 심연에 오랜만에 빛이 스며들었다.','작은 기사는 말없이 마을을 돌아보았다.','- 끝 -'];
+var P={x:0,y:0,w:18,h:28,vx:0,vy:0,g:0,f:1,hp:5,inv:0,at:0,aid:0,ad:0,dt:0,dc:0,co:0,jb:0,kb:0,soul:0,wall:0,j2:1,ah:0,fo:0,fc:0,sit:0,lid:0,am:14};
+var B={x:0,y:0,w:56,h:64,vx:0,vy:0,hp:40,mx:40,st:0,t:60,f:-1,act:0,g:0,fl:0,lid:-1,lf:-1,wall:0,rt:0};
+var HB={x:0,y:0,w:0,h:0};
+var mapC=document.createElement('canvas');
+mapC.width=MW*3;mapC.height=MH*3;
+var MX=mapC.getContext('2d');
+if(!MX){throw new Error('map 초기화 실패')}
+for(var mi=0;mi<60;mi++){MO.push({x:Math.random()*W,y:Math.random()*H,s:Math.random()*0.5+0.2,r:Math.random()*1.6+0.4})}
+var last=0,acc=0;
+
+function setT(x,y,w,h,v){for(var j=y;j<y+h;j++){for(var i=x;i<x+w;i++){if(i>=0&&i<MW&&j>=0&&j<MH){G[j*MW+i]=v}}}}
+function sol(x,y){if(x<0||x>=MW||y<0){return 1}if(y>=MH){return 0}return G[y*MW+x]}
+function hit(x,y,w,h){
+var x0=Math.floor(x/T),x1=Math.floor((x+w-1)/T),y0=Math.floor(y/T),y1=Math.floor((y+h-1)/T);
+for(var j=y0;j<=y1;j++){for(var i=x0;i<=x1;i++){if(sol(i,j)){return 1}}}
+return 0}
+function ov(ax,ay,aw,ah,bx,by,bw,bh){return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by}
+function zoneOf(x){var t=x/T;return t<28?0:t<85?1:t<136?2:t<150?3:t<180?4:5}
+function banner(s){bn=s;bt=150}
+function burst(x,y,n,c){for(var i=0;i<n&&PT.length<260;i++){PT.push({x:x,y:y,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.7)*6,l:30+Math.random()*20,c:c})}}
+function mv(o){
+o.wall=0;o.x+=o.vx;
+if(o.vx!==0&&hit(o.x,o.y,o.w,o.h)){var s=o.vx>0?1:-1;o.x-=o.vx;while(!hit(o.x+s,o.y,o.w,o.h)){o.x+=s}o.vx=0;o.wall=1}
+o.g=0;o.y+=o.vy;
+if(o.vy!==0&&hit(o.x,o.y,o.w,o.h)){var q=o.vy>0?1:-1;o.y-=o.vy;while(!hit(o.x,o.y+q,o.w,o.h)){o.y+=q}if(q>0){o.g=1}o.vy=0}}
+function reveal(cx,cy){
+if(cx<0||cx>=CW||cy<0||cy>=CH||EX[cy*CW+cx]){return}
+EX[cy*CW+cx]=1;
+MX.fillStyle='#0c1620';MX.fillRect(cx*12,cy*12,12,12);
+MX.fillStyle='#3a6a8a';
+for(var j=cy*4;j<cy*4+4&&j<MH;j++){for(var i=cx*4;i<cx*4+4&&i<MW;i++){if(G[j*MW+i]){MX.fillRect(i*3,j*3,3,3)}}}}
+function sp(t,tx,ty){
+for(var q=0;q<BN.length;q++){if(Math.abs(tx-BN[q])<7){return}}
+var h=t===0?18:t===1?20:30,w=t===0?26:t===1?22:28;
+E.push({t:t,x:tx*T,y:t===1?ty*T:ty*T-h,w:w,h:h,vx:0,vy:0,hp:(t===0?3:t===1?2:6)+(tx>150?2:0),d:-1,fl:0,lid:-1,lf:-1,g:0,wall:0,by:ty*T})}
+function setBoss(){
+B.w=bk?64:56;B.h=bk?56:64;B.mx=bk?70:40;B.hp=B.mx;
+B.x=(bk?192:145)*T;B.y=bk?9*T:15*T-B.h;
+B.vx=0;B.vy=0;B.st=0;B.t=60;B.f=-1;B.act=0;B.fl=0;B.lid=-1;B.lf=-1;B.rt=0}
+function init(){
+G.fill(0);
+setT(0,15,MW,2,1);setT(0,0,MW,1,1);setT(0,0,1,MH,1);setT(MW-1,0,1,MH,1);
+setT(70,15,7,2,0);setT(52,15,4,2,0);setT(108,6,2,9,1);setT(160,5,1,8,1);setT(163,5,1,10,1);
+for(var i=0;i<PL.length;i++){setT(PL[i][0],PL[i][1],PL[i][2],1,1)}
+E.length=0;PT.length=0;FB.length=0;
+var c0=[32,45,55,62,66,82,90,98,112,118,124,156,166,168,172,178],f1=[[36,8],[50,8],[66,6],[96,7],[116,8],[122,6],[130,8],[158,6],[168,4],[176,8],[179,6]],s2=[48,84,100,116,128,157,170,178];
+for(var a=0;a<c0.length;a++){sp(0,c0[a],15)}
+for(var b=0;b<f1.length;b++){sp(1,f1[b][0],f1[b][1])}
+for(var c=0;c<s2.length;c++){sp(2,s2[c],15)}
+setBoss();if(bk===0){setT(150,1,1,14,1)}
+P.x=BN[bi]*T+16-P.w/2;P.y=15*T-P.h;P.vx=0;P.vy=0;P.hp=mh;P.inv=60;P.at=0;P.dt=0;P.dc=0;P.kb=0;P.jb=0;P.f=1;P.soul=0;P.sit=0;P.fo=0;P.fc=0;
+lgx=P.x;lgy=P.y;cam=Math.max(0,Math.min(MW*T-W,P.x-W/2));zn=-1}
+function hurt(o){
+if(P.inv>0||P.dt>0||st!==1){return}
+P.hp--;P.inv=70+(eq[3]?40:0);P.kb=12;P.vy=-6;P.fo=0;P.fc=0;
+P.vx=(P.x+P.w/2<o.x+o.w/2?-1:1)*5;
+shake=8;hs=6;snd('hurt');burst(P.x+P.w/2,P.y+P.h/2,14,'#fff');
+if(P.hp<=0){st=2;sT=0}}
+function hitE(o){
+if(P.at>6&&o.lid!==P.aid&&ov(HB.x,HB.y,HB.w,HB.h,o.x,o.y,o.w,o.h)){
+o.lid=P.aid;o.hp-=nd;o.fl=6;hs=3;
+P.soul=Math.min(99,P.soul+(eq[1]?17:11));snd('hit');
+if(P.ad===2){P.vy=-9;P.dc=0;P.j2=1}
+if(o!==B){o.vx=P.f*4}
+burst(o.x+o.w/2,o.y+o.h/2,8,'#9ff');shake=3;return 1}
+return 0}
+function updP(){
+if(P.sit){P.vx=0;P.vy=0;P.hp=mh;return}
+var d=(K.ArrowRight?1:0)-(K.ArrowLeft?1:0);
+if(K.KeyA){P.ah++}
+if(K.KeyA&&P.ah>=15&&P.g&&P.soul>=33&&P.hp<mh&&P.kb<=0){
+P.fo=1;P.fc++;P.vx*=0.5;
+if((tm&7)===0){burst(P.x+P.w/2,P.y+4,2,'#9ff')}
+if(P.fc>=70){P.fc=0;P.soul-=33;P.hp++;snd('heal');burst(P.x+P.w/2,P.y+10,20,'#fff')}
+}else{P.fo=0;P.fc=0}
+if(P.kb>0){P.kb--;P.vx*=0.9}
+else if(P.dt>0){P.vx=P.f*10;P.vy=0;P.dt--;if((tm&1)===0){burst(P.x+P.w/2,P.y+P.h/2,1,'#556')}}
+else if(P.fo){P.vx=0}
+else{P.vx+=(d*3.8-P.vx)*(P.g?0.35:0.22);if(d){P.f=d}}
+if(P.dt<=0){P.vy=Math.min(P.vy+0.55,12)}
+var wl=0;
+if(hasWall&&!P.g&&P.kb<=0&&P.dt<=0&&P.vy>-2){if(K.ArrowLeft&&hit(P.x-2,P.y,P.w,P.h)){wl=-1}else if(K.ArrowRight&&hit(P.x+2,P.y,P.w,P.h)){wl=1}}
+if(wl){P.vy=Math.min(P.vy,2.2);P.f=wl;P.j2=1}
+if(P.g){P.co=6;P.j2=1}else if(P.co>0){P.co--}
+if(P.jb>0){
+P.jb--;
+if(wl&&!P.g){P.vy=-11;P.vx=-wl*6;P.kb=7;P.f=-wl;P.jb=0;P.j2=1;snd('jmp')}
+else if(P.co>0){P.vy=-11.5;P.co=0;P.jb=0;P.g=0;snd('jmp')}
+else if(hasDbl&&P.j2){P.vy=-10.5;P.j2=0;P.jb=0;snd('jmp');burst(P.x+P.w/2,P.y+P.h,10,'#cfe')}}
+if(!K.KeyZ&&P.vy<-4){P.vy=-4}
+mv(P);
+if(P.at>0){
+P.at--;
+if(P.ad===1){HB.x=P.x-12;HB.y=P.y-44;HB.w=42;HB.h=44}
+else if(P.ad===2){HB.x=P.x-12;HB.y=P.y+P.h;HB.w=42;HB.h=40}
+else{var lw=46+(eq[2]?16:0);HB.x=P.f>0?P.x+P.w:P.x-lw;HB.y=P.y-2;HB.w=lw;HB.h=32}}
+if(P.dc>0){P.dc--}
+if(P.inv>0){P.inv--}
+if(P.g&&P.dt<=0&&(tm&7)===0){
+var bx0=Math.floor(P.x/T),bx1=Math.floor((P.x+P.w)/T),by=Math.floor((P.y+P.h+1)/T);
+if(sol(bx0,by)&&sol(bx1,by)){lgx=P.x;lgy=P.y}}
+if(P.y>MH*T){
+P.hp--;P.x=lgx;P.y=lgy;P.vx=0;P.vy=0;P.inv=60;
+if(P.hp<=0){st=2;sT=0}}
+var cx=Math.floor(P.x/T/4);
+for(var i=-1;i<=1;i++){for(var j=0;j<CH;j++){reveal(cx+i,j)}}
+var z=zoneOf(P.x);
+if(z!==zn){zn=z;banner(ZN[z])}
+for(var k=0;k<PU.length;k++){
+var u=PU[k];
+if(!u.g&&ov(P.x,P.y,P.w,P.h,u.x*T,13*T,T,T*2)){u.g=1;if(u.t===0){hasDash=1}else if(u.t===1){hasDbl=1}else if(u.t===2){hasWall=1}else{ow[u.t-3]=1}banner(u.m);snd('pick');burst(u.x*T+16,14*T,40,'#fff');shake=6}}
+if(P.x>(bk?184:138)*T&&!B.act){B.act=1;setT(bk?180:136,1,1,14,1);shake=10;snd('roar');banner(bk?'서리의 군주':'타락한 수호자')}}
+function updE(){
+for(var i=E.length-1;i>=0;i--){
+var o=E[i];
+if(o.fl>0){o.fl--}
+if(o.t===3){
+o.vy+=0.4;o.y+=o.vy;
+if(o.y>15*T-o.h){burst(o.x+o.w/2,15*T,8,'#a8b');E[i]=E[E.length-1];E.pop();continue}
+if(ov(P.x,P.y,P.w,P.h,o.x,o.y,o.w,o.h)){hurt(o)}
+continue}
+if(o.t!==1){
+var dx=P.x-o.x,near=Math.abs(dx)<220&&Math.abs(P.y-o.y)<60;
+var spd=o.t===2?(near?2.2:0.7):0.9;
+if(o.t===2&&near){o.d=dx>0?1:-1}
+o.vx=o.d*spd+(o.fl>0?o.vx*0.5:0);
+o.vy=Math.min(o.vy+0.5,10);
+mv(o);
+var ax=Math.floor((o.x+(o.d>0?o.w+3:-3))/T),ay=Math.floor((o.y+o.h+3)/T);
+if(o.wall||(o.g&&!sol(ax,ay))){o.d=-o.d}
+}else{
+var ex=P.x-o.x,ey=P.y-o.y;
+if(ex*ex+ey*ey<90000){o.x+=(ex>0?1.3:-1.3);o.y+=(ey>0?0.9:-0.9)}
+else{o.x+=Math.sin(tm*0.03+o.by)*0.8;o.y+=Math.sin(tm*0.05+o.by)*0.6}}
+hitE(o);
+for(var f=0;f<FB.length;f++){
+var b=FB[f];
+if(o.lf!==b.id&&ov(b.x,b.y,28,20,o.x,o.y,o.w,o.h)){o.lf=b.id;o.hp-=3;o.fl=6;burst(o.x+o.w/2,o.y+o.h/2,10,'#9ff')}}
+if(o.hp<=0){
+burst(o.x+o.w/2,o.y+o.h/2,18,'#fc6');snd('kill');
+var gv=o.t===0?2:o.t===1?3:5;if(eq[4]){gv=Math.ceil(gv*1.5)}geo+=gv;
+E[i]=E[E.length-1];E.pop();continue}
+if(ov(P.x,P.y,P.w,P.h,o.x,o.y,o.w,o.h)){hurt(o)}}
+for(var g=FB.length-1;g>=0;g--){
+var q=FB[g];q.x+=q.vx;q.l--;
+if(q.l<=0||sol(Math.floor((q.x+14)/T),Math.floor((q.y+10)/T))){burst(q.x+14,q.y+10,8,'#9ff');FB[g]=FB[FB.length-1];FB.pop()}}}
+function updB(){
+if(!B.act||B.hp<=0){return}
+if(B.fl>0){B.fl--}
+var ph=B.hp<B.mx/2?1.3:1;
+var pd=(P.x+P.w/2)-(B.x+B.w/2);
+if(ph>1){
+B.rt++;
+if(B.rt>=(bk?55:80)){B.rt=0;E.push({t:3,x:P.x+(Math.random()-0.5)*260,y:0,w:22,h:22,vx:0,vy:1,hp:1,fl:0,lid:-1,lf:-1})}}
+if(bk===0){
+if(B.st===0){
+B.vx=0;B.f=pd>0?1:-1;B.t--;
+if(B.t<=0){
+B.st=Math.random()<0.5?1:2;
+if(B.st===1){B.t=45}else{B.t=0;B.vy=-14;B.vx=Math.max(-7,Math.min(7,pd/38))*ph}}}
+else if(B.st===1){
+B.vx=B.f*6.5*ph;B.t--;
+if(B.t<=0||B.wall){if(B.wall){shake=10}B.st=3;B.t=ph>1?30:45;B.vx=0}}
+else if(B.st===2){
+B.t++;
+if(B.g&&B.t>5){B.st=3;B.t=ph>1?28:40;B.vx=0;shake=12;burst(B.x+B.w/2,B.y+B.h,20,'#a8b')}}
+else{B.vx=0;B.t--;if(B.t<=0){B.st=0;B.t=ph>1?25:40}}
+B.vy=Math.min(B.vy+0.6,14);
+mv(B)
+}else{
+if(B.st===0){
+B.f=pd>0?1:-1;
+B.x+=Math.max(-3,Math.min(3,(P.x-B.x)*0.04))*ph;
+B.y+=(7*T-B.y)*0.06;
+B.t--;
+if(B.t<=0){B.st=1;B.vx=Math.max(-5,Math.min(5,pd/25));B.vy=-3}}
+else if(B.st===1){
+B.vy=Math.min(B.vy+0.9*ph,16);mv(B);
+if(B.g){
+B.st=2;B.t=ph>1?40:60;B.vx=0;shake=12;burst(B.x+B.w/2,B.y+B.h,24,'#cef');snd('kill');
+for(var k=-1;k<=1;k++){E.push({t:3,x:B.x+B.w/2+k*80,y:0,w:22,h:22,vx:0,vy:1,hp:1,fl:0,lid:-1,lf:-1})}}}
+else{B.vx=0;B.t--;if(B.t<=0){B.st=0;B.t=ph>1?45:75;B.vy=0}}
+B.x=Math.max(181*T,Math.min(198*T-B.w,B.x))}
+hitE(B);
+for(var f=0;f<FB.length;f++){
+var b=FB[f];
+if(B.lf!==b.id&&ov(b.x,b.y,28,20,B.x,B.y,B.w,B.h)){B.lf=b.id;B.hp-=3;B.fl=6;burst(B.x+B.w/2,B.y+B.h/2,10,'#9ff')}}
+if(B.hp<=0){
+burst(B.x+B.w/2,B.y+B.h/2,90,'#fff');shake=20;snd('roar');
+for(var r=E.length-1;r>=0;r--){if(E[r].t===3){E.splice(r,1)}}
+if(bk===0){bk=1;setT(136,1,1,14,0);setT(150,1,1,14,0);setBoss();banner('길이 열렸다…');hs=20}
+else{st=6;sT=0}
+return}
+if(ov(P.x,P.y,P.w,P.h,B.x,B.y,B.w,B.h)){hurt(B)}}
+function upd(){
+tm++;
+if(hs>0&&st===1){hs--;return}
+if(shake>0.3){shake*=0.85}else{shake=0}
+if(bt>0){bt--}
+if(tt>0){tt--}
+if(st===1){updP();updE();updB()}
+else if(st===3){dc=Math.min(dc+0.5,dl[di].length)}
+else{sT++}
+for(var i=PT.length-1;i>=0;i--){
+var p=PT[i];p.x+=p.vx;p.y+=p.vy;p.vy+=0.2;p.l--;
+if(p.l<=0){PT[i]=PT[PT.length-1];PT.pop()}}
+var tx=Math.max(0,Math.min(MW*T-W,P.x+P.w/2-W/2+P.f*40));
+cam+=(tx-cam)*0.1}
+function near(arr,k){for(var i=0;i<arr.length;i++){if(Math.abs(P.x+P.w/2-(arr[i].x*T+16))<k){return i}}return -1}
+function buy(c){
+if(c==='Digit1'){if(geo>=60){geo-=60;mh++;P.hp=mh;banner('마스크 조각을 얻었다 (체력 +1)')}else{banner('지오가 부족하다')}}
+else{if(nd>=2){banner('이미 단련했다')}else if(geo>=40){geo-=40;nd=2;banner('검이 단련되었다 (공격력 2)')}else{banner('지오가 부족하다')}}}
+function onDown(c){
+if(c==='KeyM'){mute=!mute;if(MG){MG.gain.value=mute?0:0.5}return}
+if(st===0){init();st=1;return}
+if(st===2){if(sT>50){init();st=1}return}
+if(st===6){if(sT>700){bi=0;init();st=1}return}
+if(c==='Escape'||(c==='KeyI'&&(st===1||st===7))){if(st===1){st=c==='KeyI'?7:4}else if(st===4||st===5||st===7){st=1}return}
+if(c==='Tab'){if(st===1&&mapOK){st=5}else if(st===5){st=1}return}
+if(st===7){
+if(c==='ArrowLeft'){sel=(sel+4)%5}else if(c==='ArrowRight'){sel=(sel+1)%5}
+else if(c==='KeyZ'&&ow[sel]){
+if(eq[sel]){eq[sel]=0}else if(nUsed()<3){eq[sel]=1}else{banner('부적 칸이 부족하다')}
+snd('pick')}
+return}
+if(st===4||st===5){return}
+if(st===3){
+if(dn===2&&(c==='Digit1'||c==='Digit2')){buy(c)}
+else if(c==='KeyZ'||c==='KeyX'||c==='ArrowUp'){
+if(dc<dl[di].length){dc=dl[di].length}
+else{di++;dc=0;if(di>=dl.length){st=1;if(dn===1&&!mapOK){mapOK=1;banner('지도를 얻었다! Tab으로 확인')}}}}
+return}
+if(P.sit){if(c==='ArrowLeft'||c==='ArrowRight'||c==='KeyZ'||c==='KeyX'||c==='KeyC'){P.sit=0}return}
+if(c==='KeyZ'){P.jb=8}
+else if(c==='KeyX'){
+if(P.at<=0&&!P.fo){P.am=eq[0]?11:14;P.at=P.am;P.aid++;snd('atk');P.ad=(K.ArrowDown&&!P.g)?2:(K.ArrowUp?1:0)}}
+else if(c==='KeyC'){
+if(hasDash&&P.dc<=0&&P.dt<=0&&!P.fo){P.dt=9;P.dc=30;P.inv=Math.max(P.inv,10);P.vy=0;snd('dsh')}}
+else if(c==='KeyD'){
+var n=near(NP,80);
+if(n>=0){th=NP[n].th;tt=200}}
+else if(c==='ArrowUp'&&P.g){
+var b=near(BN.map?BNO:BNO,50);
+if(b>=0){P.sit=1;bi=b;P.x=BN[b]*T+16-P.w/2;P.hp=mh;P.soul=99;P.at=0;banner('벤치에서 쉬었다');snd('bench');burst(P.x,P.y,16,'#9ff')}
+else{
+var m=near(NP,60);
+if(m>=0){dl=NP[m].l;di=0;dc=0;dn=m;st=3}}}}
+var BNO=[];
+for(var bo=0;bo<BN.length;bo++){BNO.push({x:BN[bo]})}
+function onUp(c){
+if(c==='KeyA'){
+if(P.ah<15&&P.soul>=33&&st===1&&!P.sit&&P.kb<=0){
+P.soul-=33;fid++;snd('cast');
+FB.push({x:P.x+(P.f>0?P.w:-28),y:P.y+4,vx:P.f*9,l:60,id:fid});
+P.vx-=P.f*2}
+P.ah=0;P.fo=0;P.fc=0}}
+function txt(s,x,y,sz,c,a){X.fillStyle=c;X.font='bold '+sz+'px sans-serif';X.textAlign=a||'center';X.fillText(s,x,y)}
+function drawP(){
+X.save();
+X.translate(P.x+P.w/2,P.y+P.h/2+(P.sit?8:0));X.scale(P.f,1);
+var wk=P.g&&Math.abs(P.vx)>0.6?Math.sin(tm*0.35)*2:0;
+X.fillStyle='#0b0f14';
+X.fillRect(-9,-2,18,P.sit?10:14);
+X.fillRect(-6,P.sit?8:12,5,3+wk);X.fillRect(2,P.sit?8:12,5,3-wk);
+X.fillStyle='#e8f2f5';
+X.beginPath();X.ellipse(0,-7+(P.fo?1:0),10,9,0,0,6.2832);X.fill();
+X.beginPath();X.moveTo(-6,-14);X.lineTo(-10,-25);X.lineTo(-1,-16);X.fill();
+X.beginPath();X.moveTo(6,-14);X.lineTo(10,-25);X.lineTo(1,-16);X.fill();
+X.fillStyle='#05080d';
+X.beginPath();X.ellipse(2,-7,2.5,4,0,0,6.2832);X.fill();
+X.beginPath();X.ellipse(7,-7,2.5,4,0,0,6.2832);X.fill();
+if(P.fo){X.strokeStyle='rgba(160,255,255,'+(0.3+P.fc/100)+')';X.lineWidth=2;X.beginPath();X.arc(0,0,20+P.fc/4,0,6.2832);X.stroke()}
+X.restore()}
+function nUsed(){var n=0;for(var i=0;i<5;i++){if(eq[i]){n++}}return n}
+function drawSw(){
+var ap=1-P.at/P.am,sw=ap*2.4-1.2,L=eq[2]?58:44;
+X.save();X.translate(P.x+P.w/2,P.y+12);
+if(P.ad===0){X.scale(P.f,1);X.rotate(sw)}else if(P.ad===1){X.rotate(-1.57+sw*P.f)}else{X.rotate(1.57-sw*P.f)}
+X.strokeStyle='rgba(220,245,255,'+(0.55*(1-ap))+')';X.lineWidth=7;
+X.beginPath();X.arc(0,0,L-6,-1.2,sw);X.stroke();
+X.fillStyle='#e8f2f5';X.beginPath();X.moveTo(6,-2.5);X.lineTo(6+L,0);X.lineTo(6,2.5);X.fill();
+X.fillStyle='#8a9aa8';X.fillRect(2,-4,5,8);X.fillRect(-8,-1.5,10,3);
+X.restore()}
+function draw(){
+var z=zoneOf(P.x+P.w/2),i,j,o;
+X.fillStyle=BG[z];X.fillRect(0,0,W,H);
+if(z===0){X.fillStyle='#dfe8f0';X.beginPath();X.arc(800-cam*0.05,90,26,0,6.2832);X.fill()}
+X.fillStyle=ZC[z][2];
+var off=(cam*0.4)%220;
+for(i=-1;i<6;i++){X.fillRect(i*220-off+30,120+((i&1)*40),60,H);X.fillRect(i*220-off+20,110+((i&1)*40),80,14)}
+X.fillStyle='rgba(180,220,255,0.35)';
+for(i=0;i<MO.length;i++){
+o=MO[i];o.y-=o.s*0.3;if(o.y<0){o.y=H}
+X.fillRect(((o.x-cam*o.s*0.6)%W+W)%W,o.y,o.r,o.r)}
+var sx=shake?(Math.random()-0.5)*shake:0,sy=shake?(Math.random()-0.5)*shake:0;
+X.save();
+X.translate(-Math.floor(cam)+sx,sy);
+var c0=Math.floor(cam/T),c1=Math.min(MW-1,c0+31);
+for(i=Math.max(0,c0);i<=c1;i++){
+var zc=ZC[zoneOf(i*T)];
+for(j=0;j<MH;j++){
+if(G[j*MW+i]){
+X.fillStyle=zc[2];X.fillRect(i*T,j*T,T,T);
+if(!sol(i,j-1)){X.fillStyle=zc[3];X.fillRect(i*T,j*T,T,3)}}}}
+for(i=0;i<BN.length;i++){
+X.fillStyle='#6fb6d6';
+X.fillRect(BN[i]*T+4,15*T-12,24,4);X.fillRect(BN[i]*T+6,15*T-22,4,10);X.fillRect(BN[i]*T+22,15*T-22,4,10)}
+for(i=0;i<NP.length;i++){
+o=NP[i];
+X.fillStyle=o.c;X.beginPath();X.ellipse(o.x*T+16,15*T-14,11,14,0,0,6.2832);X.fill();
+X.fillStyle='#05080d';X.fillRect(o.x*T+10,15*T-20,3,5);X.fillRect(o.x*T+19,15*T-20,3,5)}
+for(i=0;i<PU.length;i++){
+o=PU[i];
+if(!o.g){X.fillStyle=(o.t>2?'rgba(255,210,90,':'rgba(255,255,255,')+(0.5+Math.sin(tm*0.1)*0.3)+')';X.beginPath();X.arc(o.x*T+16,14*T+Math.sin(tm*0.05)*4,9,0,6.2832);X.fill()}}
+for(i=0;i<E.length;i++){
+o=E[i];
+if(o.t===0){
+X.fillStyle=o.fl>0?'#fff':'#2a1e1a';
+X.beginPath();X.ellipse(o.x+o.w/2,o.y+o.h/2+2,o.w/2,o.h/2,0,0,6.2832);X.fill();
+X.fillStyle='#ff9a3c';X.fillRect(o.x+(o.d>0?o.w-9:4),o.y+5,4,4)}
+else if(o.t===1){
+X.fillStyle=o.fl>0?'#fff':'#1c2630';
+X.beginPath();X.arc(o.x+o.w/2,o.y+o.h/2,11,0,6.2832);X.fill();
+X.fillStyle='#7fe';X.fillRect(o.x+5,o.y+7,3,4);X.fillRect(o.x+13,o.y+7,3,4)}
+else if(o.t===2){
+X.fillStyle=o.fl>0?'#fff':'#3a3a44';
+X.beginPath();X.ellipse(o.x+o.w/2,o.y+o.h/2,o.w/2,o.h/2,0,0,6.2832);X.fill();
+X.fillStyle='#8a8a98';X.fillRect(o.x+(o.d>0?o.w-6:0),o.y+4,6,o.h-8);
+X.fillStyle='#f66';X.fillRect(o.x+(o.d>0?o.w-14:10),o.y+8,4,4)}
+else{X.fillStyle='#5a4a68';X.fillRect(o.x,o.y,o.w,o.h)}}
+if(B.act&&B.hp>0){
+X.fillStyle=B.fl>0?'#fff':(bk?'#27506a':'#1b1420');
+X.beginPath();X.ellipse(B.x+B.w/2,B.y+B.h/2,B.w/2,B.h/2,0,0,6.2832);X.fill();
+X.beginPath();X.moveTo(B.x+8,B.y+8);X.lineTo(B.x-2,B.y-16);X.lineTo(B.x+20,B.y+2);X.fill();
+X.beginPath();X.moveTo(B.x+B.w-8,B.y+8);X.lineTo(B.x+B.w+2,B.y-16);X.lineTo(B.x+B.w-20,B.y+2);X.fill();
+X.fillStyle=bk?'#aef':(B.hp<B.mx/2?'#ff9a3a':'#ff5a5a');
+X.fillRect(B.x+B.w/2+B.f*8-3,B.y+14,6,8);X.fillRect(B.x+B.w/2+B.f*20-3,B.y+14,6,8)}
+if(st!==2&&!(P.inv>0&&((tm>>2)&1))){drawP()}
+if(P.at>0&&st===1){drawSw()}
+for(i=0;i<FB.length;i++){X.fillStyle='#bff';X.beginPath();X.ellipse(FB[i].x+14,FB[i].y+10,14,9,0,0,6.2832);X.fill()}
+for(i=0;i<PT.length;i++){o=PT[i];X.globalAlpha=Math.min(1,o.l/30);X.fillStyle=o.c;X.fillRect(o.x,o.y,3,3)}
+X.globalAlpha=1;
+var nn=near(NP,60);
+if(st===1&&nn>=0){txt('↑ 대화',NP[nn].x*T+16,15*T-44,13,'#fff')}
+else if(st===1&&P.g&&near(BNO,50)>=0&&!P.sit){txt('↑ 앉기',P.x+9,P.y-34,13,'#fff')}
+if(tt>0){txt(th,P.x+9,P.y-52,14,'rgba(200,180,255,'+Math.min(1,tt/40)+')')}
+X.restore();
+X.save();
+X.translate(P.x+P.w/2-Math.floor(cam),P.y+P.h/2);
+X.fillStyle=vg;X.fillRect(-W,-H,W*2,H*2);
+X.restore();
+X.save();
+X.beginPath();X.arc(42,46,24,0,6.2832);X.clip();
+X.fillStyle='#0c1620';X.fillRect(10,20,64,52);
+X.fillStyle='#cff';X.fillRect(10,70-P.soul/99*48,64,52);
+X.restore();
+X.strokeStyle='#e8f2f5';X.lineWidth=2;X.beginPath();X.arc(42,46,24,0,6.2832);X.stroke();
+for(i=0;i<mh;i++){
+X.beginPath();X.ellipse(90+i*26,36,9,11,0,0,6.2832);
+if(i<P.hp){X.fillStyle='#e8f2f5';X.fill()}else{X.strokeStyle='#4a5a66';X.lineWidth=2;X.stroke()}}
+txt('◆ '+geo,80,66,15,'#fc6','left');
+if(mapOK){
+var mx=W-134,mscale=3,msx=Math.max(0,Math.min(MW*3-120,P.x/T*3-60));
+X.fillStyle='rgba(0,0,0,0.6)';X.fillRect(mx-2,10,124,55);
+X.drawImage(mapC,msx,0,120,51,mx,12,120,51);
+X.fillStyle=(tm>>4)&1?'#fff':'#f66';X.fillRect(mx+P.x/T*3-msx-1,12+P.y/T*3-1,3,3)}
+if(B.act&&B.hp>0){
+X.fillStyle='#2a1218';X.fillRect(W/2-200,H-34,400,8);
+X.fillStyle='#d44';X.fillRect(W/2-200,H-34,400*B.hp/B.mx,8)}
+if(bt>0){txt(bn,W/2,150,28,'rgba(232,242,245,'+Math.min(1,bt/40)+')')}
+if(st===3){
+X.fillStyle='rgba(5,8,13,0.85)';X.fillRect(40,H-150,W-80,120);
+X.strokeStyle='#4a6a80';X.lineWidth=2;X.strokeRect(40,H-150,W-80,120);
+txt(NP[dn].n,60,H-122,16,'#9fd',left());
+txt(dl[di].slice(0,Math.floor(dc)),60,H-86,18,'#e8f2f5','left');
+if(dc>=dl[di].length){txt('▼',W-70,H-44,14,'#9bb8c8')}}
+if(st===4){
+X.fillStyle='rgba(0,0,0,0.8)';X.fillRect(0,0,W,H);
+txt('일시정지',W/2,130,36,'#e8f2f5');
+var ks=['이동  ← → ↑ ↓','점프  Z (길게 누르면 높이 점프)','공격  X (↑↓ 누른 채 위/아래 공격)','대시  C (그림자 망토 필요)','집중/주문  A (꾹: 치유, 탭: 영혼 불꽃)','꿈의 검  D (NPC의 속마음)','대화/벤치  ↑','지도  Tab','부적  I','음소거  M','계속  Esc'];
+for(i=0;i<ks.length;i++){txt(ks[i],W/2,176+i*27,18,'#9bb8c8')}}
+if(st===5){
+X.fillStyle='rgba(0,0,0,0.88)';X.fillRect(0,0,W,H);
+txt('왕국 지도',W/2,130,30,'#e8f2f5');
+X.drawImage(mapC,30,200,900,77);
+X.fillStyle='#9ff';
+for(i=0;i<BN.length;i++){if(EX[3*CW+Math.floor(BN[i]/4)]){X.fillRect(30+BN[i]*4.5-2,200+15*4.5-6,5,5)}}
+X.fillStyle=(tm>>4)&1?'#fff':'#f66';X.fillRect(30+P.x/T*4.5-3,200+P.y/T*4.5-3,6,6);
+txt('청록 점: 벤치   Tab: 닫기',W/2,350,15,'#9bb8c8')}
+if(st===7){
+X.fillStyle='rgba(0,0,0,0.85)';X.fillRect(0,0,W,H);
+txt('부적',W/2,110,34,'#e8f2f5');
+txt('칸 '+nUsed()+' / 3',W/2,150,18,'#9ff');
+for(i=0;i<5;i++){
+var bx=140+i*150;
+X.strokeStyle=i===sel?'#fff':'#4a5a66';X.lineWidth=i===sel?3:1;X.strokeRect(bx,200,110,110);
+X.fillStyle=ow[i]?(eq[i]?'#9ff':'#8a9aa8'):'#222c36';X.beginPath();X.arc(bx+55,255,26,0,6.2832);X.fill();
+txt(ow[i]?CHN[i]:'???',bx+55,335,16,'#e8f2f5');
+if(eq[i]){txt('장착',bx+55,185,14,'#9ff')}}
+txt(ow[sel]?CHD[sel]:'아직 발견하지 못했다',W/2,400,18,'#9bb8c8');
+txt('← → 선택 · Z 장착/해제 · I 닫기',W/2,450,15,'#9bb8c8')}
+if(st===0){
+X.fillStyle='rgba(0,0,0,0.65)';X.fillRect(0,0,W,H);
+txt('공허의 왕국',W/2,210,60,'#e8f2f5');
+txt('폐허가 된 지하 왕국, 그 끝에서 수호자가 기다린다',W/2,262,18,'#9bb8c8');
+txt('아무 키나 눌러 시작  (플레이 중 Esc: 조작법)',W/2,340,22,'#fff')}
+else if(st===2){
+X.fillStyle='rgba(0,0,0,'+Math.min(0.8,sT/60)+')';X.fillRect(0,0,W,H);
+txt('쓰러졌다…',W/2,260,44,'#e8f2f5');
+if(sT>50){txt('아무 키나 눌러 마지막 벤치에서 재시작',W/2,320,20,'#9bb8c8')}}
+else if(st===6){
+X.fillStyle='rgba(0,0,0,'+Math.min(0.92,sT/90)+')';X.fillRect(0,0,W,H);
+for(i=0;i<EP.length;i++){if(sT>90+i*120){txt(EP[i],W/2,200+i*44,i===3?36:22,'rgba(232,242,245,'+Math.min(1,(sT-90-i*120)/60)+')')}}
+if(sT>700){txt('아무 키나 눌러 마을에서 다시 시작',W/2,H-60,16,'#9bb8c8')}}}
+function left(){return 'left'}
+function aud(){
+if(AC){if(AC.state==='suspended'){AC.resume()}return}
+var A=window.AudioContext||window.webkitAudioContext;
+if(!A){return}
+AC=new A();MG=AC.createGain();MG.gain.value=mute?0:0.5;MG.connect(AC.destination);
+NB=AC.createBuffer(1,AC.sampleRate,AC.sampleRate);
+var d=NB.getChannelData(0);
+for(var i=0;i<d.length;i++){d[i]=Math.random()*2-1}
+setInterval(mus,300)}
+function tn(f,d,ty,v,f2){
+if(!AC||!MG){return}
+var t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();
+o.type=ty;o.frequency.setValueAtTime(f,t);
+if(f2){o.frequency.exponentialRampToValueAtTime(f2,t+d)}
+g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+o.connect(g);g.connect(MG);o.start(t);o.stop(t+d)}
+function nz(d,v,f1,f2){
+if(!AC||!MG||!NB){return}
+var t=AC.currentTime,s2=AC.createBufferSource(),f=AC.createBiquadFilter(),g=AC.createGain();
+s2.buffer=NB;f.type='bandpass';f.frequency.setValueAtTime(f1,t);f.frequency.exponentialRampToValueAtTime(f2,t+d);
+g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+s2.connect(f);f.connect(g);g.connect(MG);s2.start(t);s2.stop(t+d)}
+function snd(n){
+if(!AC||mute){return}
+if(n==='jmp'){tn(300,0.15,'square',0.05,600)}
+else if(n==='atk'){nz(0.14,0.18,2000,500)}
+else if(n==='hit'){nz(0.1,0.25,900,200);tn(160,0.1,'square',0.09,60)}
+else if(n==='hurt'){tn(220,0.35,'sawtooth',0.14,50);nz(0.25,0.2,500,100)}
+else if(n==='dsh'){nz(0.2,0.18,3000,300)}
+else if(n==='cast'){tn(500,0.35,'sawtooth',0.09,160);nz(0.3,0.12,1200,300)}
+else if(n==='heal'){tn(440,0.5,'sine',0.14,880)}
+else if(n==='pick'){tn(660,0.15,'sine',0.14);setTimeout(function(){tn(990,0.35,'sine',0.14)},110)}
+else if(n==='bench'){tn(330,0.8,'sine',0.12);tn(495,0.8,'sine',0.1)}
+else if(n==='kill'){nz(0.18,0.22,600,100);tn(120,0.2,'square',0.1,40)}
+else if(n==='roar'){tn(90,1.2,'sawtooth',0.2,40);nz(0.9,0.15,300,60)}}
+function mus(){
+if(!AC||mute||AC.state!=='running'){return}
+ms++;
+var z=zn<0?0:zn,bs=B.act&&B.hp>0,rt=[55,49,46,52,58,44][z]*(bs?0.75:1);
+if(ms%16===1){var ch=[1,1.189,1.498];for(var i=0;i<3;i++){tn(rt*ch[i]*2,5,'sine',0.045)}}
+if(Math.random()<0.5){tn(rt*4*Math.pow(2,SC[Math.floor(Math.random()*SC.length)]/12),0.9,'triangle',0.05)}
+if(bs){tn(rt,0.28,'sawtooth',0.07,rt*0.5);if(ms%2===0){nz(0.06,0.08,6000,3000)}}
+else if(ms%8===5){tn(rt*0.5,1.5,'sine',0.08)}}
+function loop(ts){
+if(!last){last=ts}
+acc+=Math.min(ts-last,100);last=ts;
+while(acc>=16.667){upd();acc-=16.667}
+draw();
+requestAnimationFrame(loop)}
+window.addEventListener('keydown',function(e){
+if(e.code==='Space'||e.code==='Tab'||e.code.indexOf('Arrow')===0){e.preventDefault()}
+if(e.repeat){return}
+aud();K[e.code]=1;onDown(e.code)});
+window.addEventListener('keyup',function(e){K[e.code]=0;onUp(e.code)});
+init();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
